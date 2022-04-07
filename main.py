@@ -281,13 +281,16 @@ def snapchat_filter_webcam(cap):
     right_eye = cv2.imread("media/right_eye.png")
     mouth = cv2.imread("media/smile.png")
 
+    flip_camera = False
+
     while cap.isOpened():
         success, frame = cap.read()
 
         if not success:
             continue
 
-        frame = cv2.flip(frame, 1)
+        if flip_camera:
+            frame = cv2.flip(frame, 1)
 
         _, face_mesh_results = detect_facial_landmarks(frame, face_mesh_videos, display=False)
 
@@ -340,6 +343,9 @@ def snapchat_filter_webcam(cap):
 
         if (k == ord("q")):
             break
+
+        if (k == ord("f")):
+            flip_camera = not flip_camera
 
     cap.release()
     cv2.destroyAllWindows()
