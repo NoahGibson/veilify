@@ -174,7 +174,7 @@ class MainWindow(QMainWindow):
 
 
     def webcam_loop(self, change_pixmap_callback):
-        cap = cv2.VideoCapture(self.current_camera_index)
+        cap = cv2.VideoCapture(self.current_camera_index, cv2.CAP_DSHOW)
         cap.set(3, self.webcam_window_width)
         cap.set(4, self.webcam_window_height)
 
