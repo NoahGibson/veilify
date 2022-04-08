@@ -26,7 +26,7 @@ class WebcamThread(QThread):
 
     def __init__(self, fn, *args, **kwargs):
         super(WebcamThread, self).__init__()
-        self.run_flag = True
+        self.run_flag = False
         self.fn = fn
         self.args = args
         self.kwargs = kwargs
@@ -36,6 +36,8 @@ class WebcamThread(QThread):
 
 
     def run(self):
+        self.run_flag = True
+
         try:
             result = self.fn(
                 *self.args,
@@ -56,49 +58,100 @@ class WebcamThread(QThread):
         self.wait()
 
 
+class WebcamWindow(QWidget):
+
+    def __init__(self, *args, **kwargs):
+        super(WebcamWindow, self).__init__(*args, **kwargs)
+
+        self.setWindowTitle("Veilify Webcam")
+        self.display_width = 640
+        self.display_height = 480
+        self.setFixedSize(self.display_width, self.display_height)
+
+        self.video_container = QLabel(self)
+
+        vbox = QVBoxLayout()
+        vbox.setContentsMargins(0, 0, 0, 0)
+        vbox.addWidget(self.video_container)
+
+        self.setLayout(vbox)
+
+
+    def update_frame(self, frame):
+        qt_frame = self.convert_cv_to_qt(frame)
+        self.video_container.setPixmap(qt_frame)
+
+
+    def convert_cv_to_qt(self, frame):
+        rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        h, w, ch = rgb_image.shape
+        bytes_per_line = ch * w
+        convert_to_Qt_format = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
+        p = convert_to_Qt_format.scaled(self.display_width, self.display_height, Qt.KeepAspectRatio)
+        return QPixmap.fromImage(p)
+
+
+    def update_display_size(self, width, height):
+        self.display_width = width
+        self.display_height = height
+        self.setFixedSize(self.display_width, self.display_height)
+
+
 class MainWindow(QMainWindow):
 
     def __init__(self, *args, **kwargs):
         super(MainWindow, self).__init__(*args, **kwargs)
 
         self.setWindowTitle("Veilify")
-        self.display_width = 640
-        self.display_height = 480
-        self.setFixedSize(self.display_width, self.display_height)
 
         self.video_flip = True
         self.overlay_model_images = {}
         self.overlay_model_index = 0
         self.overlay_models = [
+            "none",
             "face_mesh",
             "real_sample",
             "creep_0",
             "mustache"
         ]
 
-        self.image_label = QLabel(self)
-        self.image_label.resize(self.display_width, self.display_height)
+        self.available_cameras = self.get_available_cameras()
+        self.current_camera_index = 0
 
+        self.overlay_label = QLabel("Overlay:")
         self.overlay_model_select = QComboBox()
         self.overlay_model_select.addItems(self.overlay_models)
         self.overlay_model_select.currentIndexChanged.connect(self.set_current_overlay_model)
+        self.overlay_option = QHBoxLayout()
+        self.overlay_option.addWidget(self.overlay_label)
+        self.overlay_option.addWidget(self.overlay_model_select)
+
+        self.camera_label = QLabel("Camera:")
+        self.camera_select = QComboBox()
+        self.camera_select.addItems(self.available_cameras)
+        self.camera_select.currentIndexChanged.connect(self.set_current_camera)
+        self.camera_option = QHBoxLayout()
+        self.camera_option.addWidget(self.camera_label)
+        self.camera_option.addWidget(self.camera_select)
 
         self.flip_video_toggle = QRadioButton("Flip Video")
         self.flip_video_toggle.setChecked(self.video_flip)
         self.flip_video_toggle.toggled.connect(self.set_video_flip)
 
-        formbox = QHBoxLayout()
-        formbox.addWidget(self.overlay_model_select)
+        formbox = QVBoxLayout()
+        formbox.addLayout(self.overlay_option)
+        formbox.addLayout(self.camera_option)
         formbox.addWidget(self.flip_video_toggle)
 
-        vbox = QVBoxLayout()
-        vbox.addWidget(self.image_label)
-        vbox.addLayout(formbox)
-
         w = QWidget()
-        w.setLayout(vbox)
+        w.setLayout(formbox)
 
         self.setCentralWidget(w)
+
+        self.webcam_window = WebcamWindow()
+        self.webcam_window_width = 640
+        self.webcam_window_height = 480
+        self.webcam_window.update_display_size(self.webcam_window_width, self.webcam_window_height)
 
         self.mp_face_mesh = mp.solutions.face_mesh
         self.face_mesh = self.mp_face_mesh.FaceMesh(
@@ -109,17 +162,21 @@ class MainWindow(QMainWindow):
         )
 
         self.webcam_thread = WebcamThread(self.webcam_loop)
-        self.webcam_thread.signals.change_pixmap_signal.connect(self.update_image)
+        self.webcam_thread.signals.change_pixmap_signal.connect(self.update_frame)
         self.webcam_thread.start()
 
+        self.webcam_window.show()
 
-    def update_image(self, frame):
-        qt_frame = self.convert_cv_to_qt(frame)
-        self.image_label.setPixmap(qt_frame)
+
+    def update_frame(self, frame):
+        self.webcam_window.update_frame(frame)
 
 
     def webcam_loop(self, change_pixmap_callback):
-        cap = cv2.VideoCapture(0)
+        cap = cv2.VideoCapture(int(self.get_current_camera()))
+        cap.set(3, self.webcam_window_width)
+        cap.set(4, self.webcam_window_height)
+
         while self.webcam_thread.run_flag:
             success, frame = cap.read()
 
@@ -131,7 +188,9 @@ class MainWindow(QMainWindow):
 
             overlay_model_name = self.get_current_overlay_model()
 
-            if overlay_model_name == "face_mesh":
+            if overlay_model_name == "none":
+                pass
+            elif overlay_model_name == "face_mesh":
                 frame = generate_frame_with_face_mesh(
                     frame=frame,
                     face_mesh=self.face_mesh
@@ -148,17 +207,9 @@ class MainWindow(QMainWindow):
         cap.release()
 
 
-    def convert_cv_to_qt(self, frame):
-        rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        h, w, ch = rgb_image.shape
-        bytes_per_line = ch * w
-        convert_to_Qt_format = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
-        p = convert_to_Qt_format.scaled(self.display_width, self.display_height, Qt.KeepAspectRatio)
-        return QPixmap.fromImage(p)
-
-
     def closeEvent(self, event):
         self.webcam_thread.stop()
+        self.webcam_window.close()
         event.accept()
 
 
@@ -167,20 +218,28 @@ class MainWindow(QMainWindow):
 
 
     def set_current_overlay_model(self, i):
-        print(str(i))
         self.overlay_model_index = i
+
+
+    def get_current_camera(self):
+        return self.available_cameras[self.current_camera_index]
+
+
+    def set_current_camera(self, i):
+        self.current_camera_index = i
+        self.webcam_thread.stop()
+        self.webcam_thread.start()
 
 
     def set_video_flip(self):
         self.video_flip = self.flip_video_toggle.isChecked()
-        print(self.video_flip)
 
 
     def get_overlays_for_model(self, model_name):
         if model_name in self.overlay_model_images:
             return self.overlay_model_images[model_name]
         else:
-            overlay_path = f"media/{model_name}"
+            overlay_path = f"overlays/{model_name}"
             images = [
                 (cv2.imread(f"{overlay_path}/mouth.png"), self.mp_face_mesh.FACEMESH_LIPS),
                 (cv2.imread(f"{overlay_path}/left_eye.png"), self.mp_face_mesh.FACEMESH_LEFT_EYE),
@@ -189,6 +248,21 @@ class MainWindow(QMainWindow):
 
             self.overlay_model_images[model_name] = images
             return images
+
+
+    def get_available_cameras(self):
+        index_to_check = 0
+        available_indexes = []
+        total_indexes_to_check = 10
+
+        while index_to_check < total_indexes_to_check:
+            cap = cv2.VideoCapture(index_to_check)
+            if cap.read()[0]:
+                available_indexes.append(str(index_to_check))
+                cap.release()
+            index_to_check += 1
+
+        return available_indexes
 
 
 if __name__=="__main__":
