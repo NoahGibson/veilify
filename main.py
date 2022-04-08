@@ -42,7 +42,8 @@ overlay_model_index = 1
 overlay_models = [
     "face_mesh",
     "real_sample",
-    "creep_0"
+    "creep_0",
+    "mustache"
 ]
 
 while capture.isOpened():
