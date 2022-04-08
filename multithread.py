@@ -1,6 +1,7 @@
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
+from PyQt5.QtMultimedia import *
 
 import traceback
 import sys
@@ -173,7 +174,7 @@ class MainWindow(QMainWindow):
 
 
     def webcam_loop(self, change_pixmap_callback):
-        cap = cv2.VideoCapture(int(self.get_current_camera()))
+        cap = cv2.VideoCapture(self.current_camera_index)
         cap.set(3, self.webcam_window_width)
         cap.set(4, self.webcam_window_height)
 
@@ -221,10 +222,6 @@ class MainWindow(QMainWindow):
         self.overlay_model_index = i
 
 
-    def get_current_camera(self):
-        return self.available_cameras[self.current_camera_index]
-
-
     def set_current_camera(self, i):
         self.current_camera_index = i
         self.webcam_thread.stop()
@@ -251,18 +248,7 @@ class MainWindow(QMainWindow):
 
 
     def get_available_cameras(self):
-        index_to_check = 0
-        available_indexes = []
-        total_indexes_to_check = 10
-
-        while index_to_check < total_indexes_to_check:
-            cap = cv2.VideoCapture(index_to_check)
-            if cap.read()[0]:
-                available_indexes.append(str(index_to_check))
-                cap.release()
-            index_to_check += 1
-
-        return available_indexes
+        return map(lambda camera: camera.description(), QCameraInfo.availableCameras())
 
 
 if __name__=="__main__":
