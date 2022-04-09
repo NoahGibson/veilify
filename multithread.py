@@ -65,9 +65,7 @@ class WebcamWindow(QWidget):
         super(WebcamWindow, self).__init__(*args, **kwargs)
 
         self.setWindowTitle("Veilify Webcam")
-        self.display_width = 640
-        self.display_height = 480
-        self.setFixedSize(self.display_width, self.display_height)
+        self.update_display_size(640, 480)
 
         self.video_container = QLabel(self)
 
@@ -117,7 +115,7 @@ class MainWindow(QMainWindow):
         ]
 
         self.available_cameras = self.get_available_cameras()
-        self.current_camera_index = 0
+        self.set_current_camera_info(0)
 
         self.overlay_label = QLabel("Overlay:")
         self.overlay_model_select = QComboBox()
@@ -129,11 +127,19 @@ class MainWindow(QMainWindow):
 
         self.camera_label = QLabel("Camera:")
         self.camera_select = QComboBox()
-        self.camera_select.addItems(self.available_cameras)
-        self.camera_select.currentIndexChanged.connect(self.set_current_camera)
+        self.camera_select.addItems(map(lambda camera: camera.description(), self.available_cameras))
+        self.camera_select.currentIndexChanged.connect(self.change_current_camera)
         self.camera_option = QHBoxLayout()
         self.camera_option.addWidget(self.camera_label)
         self.camera_option.addWidget(self.camera_select)
+
+        self.resolution_label = QLabel("Resolution:")
+        self.resolution_select = QComboBox()
+        self.resolution_select.addItems(map(lambda size: f"{size.width()}x{size.height()}", self.available_camera_resolutions))
+        self.resolution_select.currentIndexChanged.connect(self.change_current_resolution)
+        self.resolution_option = QHBoxLayout()
+        self.resolution_option.addWidget(self.resolution_label)
+        self.resolution_option.addWidget(self.resolution_select)
 
         self.flip_video_toggle = QRadioButton("Flip Video")
         self.flip_video_toggle.setChecked(self.video_flip)
@@ -142,6 +148,7 @@ class MainWindow(QMainWindow):
         formbox = QVBoxLayout()
         formbox.addLayout(self.overlay_option)
         formbox.addLayout(self.camera_option)
+        formbox.addLayout(self.resolution_option)
         formbox.addWidget(self.flip_video_toggle)
 
         w = QWidget()
@@ -150,8 +157,8 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(w)
 
         self.webcam_window = WebcamWindow()
-        self.webcam_window_width = 640
-        self.webcam_window_height = 480
+        self.webcam_window_width = self.current_camera_resolution.width()
+        self.webcam_window_height = self.current_camera_resolution.height()
         self.webcam_window.update_display_size(self.webcam_window_width, self.webcam_window_height)
 
         self.mp_face_mesh = mp.solutions.face_mesh
@@ -164,8 +171,8 @@ class MainWindow(QMainWindow):
 
         self.webcam_thread = WebcamThread(self.webcam_loop)
         self.webcam_thread.signals.change_pixmap_signal.connect(self.update_frame)
-        self.webcam_thread.start()
 
+        self.webcam_thread.start()
         self.webcam_window.show()
 
 
@@ -222,8 +229,30 @@ class MainWindow(QMainWindow):
         self.overlay_model_index = i
 
 
-    def set_current_camera(self, i):
+    def change_current_camera(self, i):
+        self.set_current_camera_info(i)
+        self.resolution_select.clear()
+        self.resolution_select.addItems(map(lambda size: f"{size.width()}x{size.height()}", self.available_camera_resolutions))
+        self.restart_webcam()
+
+
+    def change_current_resolution(self, i):
+        self.current_camera_resolution = self.available_camera_resolutions[i]
+        self.webcam_window_width = self.current_camera_resolution.width()
+        self.webcam_window_height = self.current_camera_resolution.height()
+        self.restart_webcam()
+        self.webcam_window.update_display_size(self.webcam_window_width, self.webcam_window_height)
+
+
+    def set_current_camera_info(self, i):
         self.current_camera_index = i
+        self.current_camera = QCamera(self.available_cameras[self.current_camera_index])
+        self.current_camera.load()
+        self.available_camera_resolutions = self.current_camera.supportedViewfinderResolutions()
+        self.current_camera_resolution = self.available_camera_resolutions[0]
+
+
+    def restart_webcam(self):
         self.webcam_thread.stop()
         self.webcam_thread.start()
 
@@ -248,7 +277,7 @@ class MainWindow(QMainWindow):
 
 
     def get_available_cameras(self):
-        return map(lambda camera: camera.description(), QCameraInfo.availableCameras())
+        return QCameraInfo.availableCameras()
 
 
 if __name__=="__main__":
