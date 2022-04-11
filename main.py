@@ -182,8 +182,11 @@ class MainWindow(QMainWindow):
 
     def webcam_loop(self, change_pixmap_callback):
         cap = cv2.VideoCapture(self.current_camera_index)
-        cap.set(3, self.webcam_window_width)
-        cap.set(4, self.webcam_window_height)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.webcam_window_width)
+        # For some reason on Mac, setting both the width and the height breaks the capture,
+        # so for now at least, only setting the width, and letting opencv figure out the closest
+        # available resolution (I think it does that at least?)
+        # cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.webcam_window_height)
 
         while self.webcam_thread.run_flag:
             success, frame = cap.read()
@@ -231,9 +234,14 @@ class MainWindow(QMainWindow):
 
     def change_current_camera(self, i):
         self.set_current_camera_info(i)
+        self.resolution_select.blockSignals(True)
         self.resolution_select.clear()
         self.resolution_select.addItems(map(lambda size: f"{size.width()}x{size.height()}", self.available_camera_resolutions))
+        self.resolution_select.blockSignals(False)
+        self.webcam_window_width = self.current_camera_resolution.width()
+        self.webcam_window_height = self.current_camera_resolution.height()
         self.restart_webcam()
+        self.webcam_window.update_display_size(self.webcam_window_width, self.webcam_window_height)
 
 
     def change_current_resolution(self, i):

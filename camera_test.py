@@ -8,7 +8,7 @@ def get_overlays_for_model(model_name, overlay_model_images):
     if model_name in overlay_model_images:
         return overlay_model_images[model_name]
     else:
-        overlay_path = f"media/{model_name}"
+        overlay_path = f"overlays/{model_name}"
         images = [
             (cv2.imread(f"{overlay_path}/mouth.png"), mp_face_mesh.FACEMESH_LIPS),
             (cv2.imread(f"{overlay_path}/left_eye.png"), mp_face_mesh.FACEMESH_LEFT_EYE),
