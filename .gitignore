@@ -5,3 +5,6 @@ share/
 pyvenv.cfg
 __pycache__/
 bin/
+build/
+dist/
+.DS_Store
